@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thai Zahlen Trainer</title>
+<style>
+  body { font-family: Arial; background: linear-gradient(135deg, #e0f7fa, #ffffff); margin:0; padding:0; display:flex; flex-direction:column; align-items:center;}
+  h1 { color:#00796b; text-align:center; margin-top:20px;}
+  .card { background:white; padding:20px; border-radius:15px; box-shadow:0 5px 15px rgba(0,0,0,0.1); max-width:450px; width:90%; margin:15px auto; text-align:center;}
+  button { background:#00796b; color:white; border:none; padding:12px 25px; margin:5px; border-radius:12px; cursor:pointer; font-size:16px; transition:0.2s;}
+  button:hover { background:#004d40;}
+  input[type=number] { padding:10px; border-radius:10px; border:1px solid #ccc; font-size:16px; margin-top:10px; width:120px; text-align:center;}
+  .feedback { font-size:18px; margin-top:10px; height:24px;}
+  .scoreboard { margin-top:15px; font-size:18px; color:#333;}
+  .timer { margin-top:10px; font-size:22px; font-weight:bold; color:#d32f2f;}
+  .section { margin-top:15px; }
+  .flex-row { display:flex; flex-wrap:wrap; justify-content:center; }
+</style>
+</head>
+<body>
+
+<h1>Thai Zahlen Trainer</h1>
+
+<!-- Menü -->
+<div class="card" id="menu">
+  <h2>Schwierigkeitsgrad wählen:</h2>
+  <div class="flex-row">
+    <button onclick="setRange(1,20)">😊 Leicht (1–20)</button>
+    <button onclick="setRange(1,100)">😅 Mittel (1–100)</button>
+    <button onclick="setRange(1,1000)">🔥 Schwer (1–1000)</button>
+  </div>
+
+  <div class="section">
+    <h3>Oder eigene Auswahl:</h3>
+    <label>Von: <input type="number" id="minCustom" value="1"></label>
+    <label>Bis: <input type="number" id="maxCustom" value="20"></label>
+    <br>
+    <button onclick="useCustomRange()">Übernehmen</button>
+  </div>
+
+  <div class="section">
+    <h3>Spielmodus wählen:</h3>
+    <div class="flex-row">
+      <button onclick="startGame('endless')">🎮 Endlos-Modus</button>
+      <button onclick="startGame('timer')">⏱️ 60-Sekunden-Modus</button>
+      <button onclick="startGame('fast')">⚡ Schneller Modus</button>
+    </div>
+  </div>
+</div>
+
+<!-- Spiel -->
+<div class="card" id="game" style="display:none;">
+  <p id="instruction">Höre zu und tippe die Zahl:</p>
+  <button onclick="speakNumber()">🔊 Zahl anhören</button>
+
+  <!-- Sprachgeschwindigkeit -->
+  <div class="section">
+    <label for="speed">Sprachgeschwindigkeit:</label><br>
+    <input type="range" id="speed" min="0.5" max="1.5" step="0.1" value="0.7" oninput="updateSpeed(this.value)">
+    <span id="speedValue">0.7</span>
+  </div>
+
+  <!-- Schneller Modus Intervall -->
+  <div class="section" id="fastSettings" style="display:none;">
+    <label for="fastDelay">Intervall (Sek.):</label><br>
+    <input type="range" id="fastDelay" min="1" max="5" step="0.5" value="2" oninput="updateFastDelay(this.value)">
+    <span id="fastDelayValue">2.0</span>
+  </div>
+
+  <br>
+  <input type="number" id="answer" placeholder="Deine Antwort" />
+  <button onclick="checkAnswer()">Prüfen</button>
+  <div class="feedback" id="feedback"></div>
+  <div class="scoreboard">Punkte: <span id="score">0</span> | Highscore: <span id="highscore">0</span></div>
+  <div class="timer" id="timer" style="display:none;">60</div>
+  <div class="section">
+    <button onclick="backToMenu()">🔙 Zurück zum Menü</button>
+  </div>
+</div>
+
+<script>
+let min=1, max=20, currentNumber=0, score=0, mode='endless', timerInterval, timeLeft=60, fastTimeout;
+let highscoreEndless = localStorage.getItem("thaiHighscoreEndless") || 0;
+let highscoreTimer = localStorage.getItem("thaiHighscoreTimer") || 0;
+let highscoreFast = localStorage.getItem("thaiHighscoreFast") || 0;
+let speechRate = 0.7; // Sprachtempo
+let fastDelay = 2000; // Standard-Intervall im schnellen Modus (ms)
+
+// Bereich setzen
+function setRange(a,b){ 
+  min=a; max=b; 
+  document.getElementById("minCustom").value=a; 
+  document.getElementById("maxCustom").value=b; 
+}
+function useCustomRange(){ 
+  min=parseInt(document.getElementById("minCustom").value); 
+  max=parseInt(document.getElementById("maxCustom").value); 
+}
+
+function startGame(selectedMode){
+  score=0;
+  mode=selectedMode;
+  document.getElementById("score").innerText=score;
+  document.getElementById("menu").style.display="none";
+  document.getElementById("game").style.display="block";
+  
+  if(mode==='endless'){
+    document.getElementById("highscore").innerText=highscoreEndless;
+    document.getElementById("timer").style.display="none";
+    document.getElementById("fastSettings").style.display="none";
+  } 
+  else if(mode==='timer'){
+    document.getElementById("highscore").innerText=highscoreTimer;
+    document.getElementById("timer").style.display="block";
+    document.getElementById("fastSettings").style.display="none";
+    timeLeft=60;
+    document.getElementById("timer").innerText=timeLeft;
+    timerInterval=setInterval(()=>{
+      timeLeft--;
+      document.getElementById("timer").innerText=timeLeft;
+      if(timeLeft<=0){ clearInterval(timerInterval); endTimerGame(); }
+    },1000);
+  }
+  else if(mode==='fast'){
+    document.getElementById("highscore").innerText=highscoreFast;
+    document.getElementById("timer").style.display="none";
+    document.getElementById("fastSettings").style.display="block";
+  }
+  
+  nextNumber();
+}
+
+function nextNumber(){
+  clearTimeout(fastTimeout);
+  currentNumber=Math.floor(Math.random()*(max-min+1))+min;
+  speakNumber();
+  document.getElementById("answer").value="";
+  document.getElementById("feedback").innerText="";
+  
+  if(mode==='fast'){
+    fastTimeout=setTimeout(()=>{ checkAnswer(true); }, fastDelay);
+  }
+}
+
+function speakNumber(){
+  speechSynthesis.cancel(); // alte Sprachausgabe stoppen
+  const utterance=new SpeechSynthesisUtterance(currentNumber.toString());
+  let voices = speechSynthesis.getVoices();
+  let thaiVoice = voices.find(v=>v.lang.startsWith("th"));
+  if(thaiVoice) utterance.voice=thaiVoice;
+  utterance.lang = thaiVoice? "th-TH" : "en-US";
+  utterance.rate = speechRate; 
+  speechSynthesis.speak(utterance);
+}
+
+function checkAnswer(auto=false){
+  let userAnswer=parseInt(document.getElementById("answer").value);
+  if(userAnswer===currentNumber){
+    document.getElementById("feedback").innerText="✅ Richtig!";
+    score++;
+    document.getElementById("score").innerText=score;
+    if(mode==='endless' && score>highscoreEndless){ highscoreEndless=score; localStorage.setItem("thaiHighscoreEndless",highscoreEndless); document.getElementById("highscore").innerText=highscoreEndless;}
+    if(mode==='fast' && score>highscoreFast){ highscoreFast=score; localStorage.setItem("thaiHighscoreFast",highscoreFast); document.getElementById("highscore").innerText=highscoreFast;}
+  } else if(!auto) {
+    document.getElementById("feedback").innerText="❌ Falsch! Richtig war "+currentNumber;
+    if(mode==='endless'){ score=0; document.getElementById("score").innerText=score;}
+  }
+  
+  // bei Timer-Modus trotzdem weitermachen
+  if(mode==='timer'){ nextNumber(); }
+  else if(mode!=='timer'){ setTimeout(nextNumber,1000); }
+}
+
+function endTimerGame(){
+  document.getElementById("feedback").innerText="⏱️ Zeit vorbei! Dein Ergebnis: "+score;
+  if(score>highscoreTimer){ highscoreTimer=score; localStorage.setItem("thaiHighscoreTimer",highscoreTimer); document.getElementById("highscore").innerText=highscoreTimer;}
+}
+
+function backToMenu(){
+  if(timerInterval) clearInterval(timerInterval);
+  clearTimeout(fastTimeout);
+  document.getElementById("game").style.display="none";
+  document.getElementById("menu").style.display="block";
+}
+
+// Sprachgeschwindigkeit
+function updateSpeed(val){
+  speechRate = parseFloat(val);
+  document.getElementById("speedValue").innerText = speechRate.toFixed(1);
+}
+
+// Schneller-Modus Delay
+function updateFastDelay(val){
+  fastDelay = parseFloat(val) * 1000; // Sek. -> ms
+  document.getElementById("fastDelayValue").innerText = parseFloat(val).toFixed(1);
+}
+
+// ENTER-Taste im Eingabefeld löst checkAnswer aus
+document.getElementById("answer").addEventListener("keypress", function(e){
+  if(e.key === "Enter"){
+    checkAnswer();
+  }
+});
+</script>
+</body>
+</html>
